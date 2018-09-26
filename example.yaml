@@ -1,0 +1,267 @@
+---
+  Parameters:
+    InstanceKeyPair:
+      Description: Name of an existing EC2 KeyPair to enable SSH access to the instance
+      Type: AWS::EC2::KeyPair::KeyName
+      ConstraintDescription: must be the name of an existing EC2 KeyPair.
+
+  Mappings:
+    VPCConfig:
+      VPC:
+        CIDR: 10.0.0.0/16
+      Subnet1:
+        CIDR: 10.0.1.0/24
+        AZIndex: 0
+      Subnet2:
+        CIDR: 10.0.2.0/24
+        AZIndex: 1
+      DefaultPublicRoute:
+        CIDR: 0.0.0.0/0
+    EC2Config:
+      Nexus:
+        KeyPair: nexus-key-pair.pem
+        InstanceType: t2.micro
+        ImageId: ami-0f5dbc86dd9cbf7a8
+    SecurityGroupConfig:
+      ELB:
+        ClientIP: 0.0.0.0/0
+      Nexus:
+        FromPortOut: 8180
+        ToPortOut: 8180
+    S3DataConfig:
+      Nexus:
+        BucketName: nexus-data-repo
+    IAMConfig:
+      S3Policy:
+        Name: ec2-admin-access
+
+  Resources:
+    VPC:
+      Type: AWS::EC2::VPC
+      Properties:
+        CidrBlock: !FindInMap [VPCConfig, VPC, CIDR]
+        Tags:
+          - Key: EnvironmentType
+            Value: Nexus
+
+    PublicSubnet1:
+      Type: AWS::EC2::Subnet
+      Properties:
+        VpcId: !Ref VPC
+        AvailabilityZone: !Select [ !FindInMap [VPCConfig, Subnet1, AZIndex], !GetAZs '' ]
+        CidrBlock: !FindInMap [VPCConfig, Subnet1, CIDR]
+        MapPublicIpOnLaunch: true
+
+    PublicSubnet2:
+      Type: AWS::EC2::Subnet
+      Properties:
+        VpcId: !Ref VPC
+        AvailabilityZone: !Select [ !FindInMap [VPCConfig, Subnet2, AZIndex], !GetAZs '' ]
+        CidrBlock: !FindInMap [VPCConfig, Subnet2, CIDR]
+        MapPublicIpOnLaunch: true
+
+    InternetGateway:
+      Type: AWS::EC2::InternetGateway
+
+    InternetGatewayAttachment:
+      Type: AWS::EC2::VPCGatewayAttachment
+      Properties:
+        VpcId: !Ref VPC
+        InternetGatewayId: !Ref InternetGateway
+
+    PublicRouteTable:
+      Type: AWS::EC2::RouteTable
+      Properties:
+          VpcId: !Ref VPC
+
+    DefaultPublicRoute:
+      Type: AWS::EC2::Route
+      DependsOn: InternetGatewayAttachment
+      Properties:
+          RouteTableId: !Ref PublicRouteTable
+          DestinationCidrBlock: !FindInMap [VPCConfig, DefaultPublicRoute, CIDR]
+          GatewayId: !Ref InternetGateway
+
+    PublicSubnet1RouteTableAssociation:
+      Type: AWS::EC2::SubnetRouteTableAssociation
+      Properties:
+          RouteTableId: !Ref PublicRouteTable
+          SubnetId: !Ref PublicSubnet1
+
+    PublicSubnet2RouteTableAssociation:
+      Type: AWS::EC2::SubnetRouteTableAssociation
+      Properties:
+          RouteTableId: !Ref PublicRouteTable
+          SubnetId: !Ref PublicSubnet2
+
+    ELBSecurityGroup:
+      Type: AWS::EC2::SecurityGroup
+      Properties:
+        GroupDescription: Firewall in front of ELB
+        SecurityGroupIngress:
+          - IpProtocol: tcp
+            FromPort: 80
+            ToPort: 80
+            CidrIp: !FindInMap [ SecurityGroupConfig, ELB, ClientIP ]
+        VpcId: !Ref VPC
+
+    NexusSecurityGroup:
+      Type: AWS::EC2::SecurityGroup
+      Properties:
+        GroupDescription: Firewall in front of Nexus
+        SecurityGroupIngress:
+          - IpProtocol: tcp
+            FromPort: 22
+            ToPort: 22
+            # CidrIp: !FindInMap [ SecurityGroupConfig, ELB, ClientIP ]
+            CidrIp: 0.0.0.0/0
+
+          - IpProtocol: tcp
+            FromPort: 80
+            ToPort: 80
+            SourceSecurityGroupId: !Ref ELBSecurityGroup
+
+          - IpProtocol: tcp
+            FromPort: !FindInMap [ SecurityGroupConfig, Nexus, FromPortOut ]
+            ToPort: !FindInMap [ SecurityGroupConfig, Nexus, ToPortOut ]
+            SourceSecurityGroupId: !Ref ELBSecurityGroup
+        VpcId: !Ref VPC
+
+    EC2Instance1:
+      Type: AWS::EC2::Instance
+      Metadata:
+        AWS::CloudFormation::Init:
+          config:
+            packages:
+              yum:
+                httpd: []
+            files:
+              "/var/www/html/index.html":
+                content: |
+                  <html>
+                    <h1>Server A</h1>
+                  </html>
+                mode: '000644'
+                owner: "root"
+                group: "root"
+              "/etc/cfn/hooks.d/cfn-auto-reloader.conf":
+                content: !Sub |
+                  [cfn-auto-reloader-hook]
+                  triggers=post.update
+                  path=Resources.EC2Instance1.Metadata.AWS::CloudFormation::Init
+                  action=/opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource EC2Instance1 --region ${AWS::Region}
+                mode: "000400"
+                owner: "root"
+                group: "root"
+              "/etc/cfn/cfn-hup.conf":
+                content: !Sub |
+                  [main]
+                  stack=${AWS::StackId}
+                  region=${AWS::Region}
+                mode: "000400"
+                owner: "root"
+                group: "root"
+            services:
+              sysvinit:
+                httpd:
+                  enabled: true
+                  ensureRunning: true
+      CreationPolicy:
+        ResourceSignal:
+          Timeout: PT3M
+      Properties:
+        InstanceType: !FindInMap [ EC2Config, Nexus, InstanceType ]
+        IamInstanceProfile: !FindInMap [ IAMConfig, S3Policy, Name ]
+        SecurityGroupIds:
+          - !Ref NexusSecurityGroup
+        KeyName: !Ref InstanceKeyPair
+        ImageId: !FindInMap [ EC2Config, Nexus, ImageId ]
+        SubnetId: !Ref PublicSubnet1
+        UserData:
+          Fn::Base64:
+            !Sub |
+              #!/bin/bash
+              yum install -y aws-cfn-bootstrap
+              /opt/aws/bin/cfn-init -v -s ${AWS::StackId} -r EC2Instance1 --region ${AWS::Region} || error_exit 'Failed to run cfn-init'
+              /opt/aws/bin/cfn-hup || error_exit 'Failed to run cfn-hup'
+              /opt/aws/bin/cfn-signal -e $? --stack ${AWS::StackId} --resource EC2Instance1 --region ${AWS::Region}
+
+    EC2Instance2:
+      Type: AWS::EC2::Instance
+      Metadata:
+        AWS::CloudFormation::Init:
+          config:
+            packages:
+              yum:
+                httpd: []
+            files:
+              "/var/www/html/index.html":
+                content: |
+                  <html>
+                    <h1>Server B</h1>
+                  </html>
+                mode: '000644'
+                owner: "root"
+                group: "root"
+              "/etc/cfn/hooks.d/cfn-auto-reloader.conf":
+                content: !Sub |
+                  [cfn-auto-reloader-hook]
+                  triggers=post.update
+                  path=Resources.EC2Instance2.Metadata.AWS::CloudFormation::Init
+                  action=/opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource EC2Instance2 --region ${AWS::Region}
+                mode: "000400"
+                owner: "root"
+                group: "root"
+              "/etc/cfn/cfn-hup.conf":
+                content: !Sub |
+                  [main]
+                  stack=${AWS::StackId}
+                  region=${AWS::Region}
+                mode: "000400"
+                owner: "root"
+                group: "root"
+            services:
+              sysvinit:
+                httpd:
+                  enabled: true
+                  ensureRunning: true
+      CreationPolicy:
+        ResourceSignal:
+          Timeout: PT3M
+      Properties:
+        InstanceType: !FindInMap [ EC2Config, Nexus, InstanceType ]
+        IamInstanceProfile: !FindInMap [ IAMConfig, S3Policy, Name ]
+        SecurityGroupIds:
+          - !Ref NexusSecurityGroup
+        KeyName: !Ref InstanceKeyPair
+        ImageId: !FindInMap [ EC2Config, Nexus, ImageId ]
+        SubnetId: !Ref PublicSubnet2
+        UserData:
+          Fn::Base64:
+            !Sub |
+              #!/bin/bash
+              yum install -y aws-cfn-bootstrap
+              /opt/aws/bin/cfn-init -v -s ${AWS::StackId} -r EC2Instance2 --region ${AWS::Region} || error_exit 'Failed to run cfn-init'
+              /opt/aws/bin/cfn-hup || error_exit 'Failed to run cfn-hup'
+              /opt/aws/bin/cfn-signal -e $? --stack ${AWS::StackId} --resource EC2Instance2 --region ${AWS::Region}
+
+    ElasticLoadBalancer:
+      Type: AWS::ElasticLoadBalancing::LoadBalancer
+      Properties:
+        CrossZone: true
+        Instances: [!Ref EC2Instance1, !Ref EC2Instance2]
+        SecurityGroups:
+          - !Ref ELBSecurityGroup
+        Listeners:
+          - LoadBalancerPort: 80
+            InstancePort: 80
+            Protocol: HTTP
+        HealthCheck:
+          Target: HTTP:80/index.html
+          HealthyThreshold: 3
+          UnhealthyThreshold: 2
+          Interval: 5
+          Timeout: 3
+        Subnets:
+          - !Ref PublicSubnet1
+          - !Ref PublicSubnet2
