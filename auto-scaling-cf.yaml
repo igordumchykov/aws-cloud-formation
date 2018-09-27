@@ -127,67 +127,31 @@
             SourceSecurityGroupId: !Ref ELBSecurityGroup
         VpcId: !Ref VPC
 
-    EC2Instance1:
-      Type: AWS::EC2::Instance
-      Metadata:
-        AWS::CloudFormation::Init:
-          config:
-            packages:
-              yum:
-                httpd: []
-            files:
-              "/var/www/html/index.html":
-                content: |
-                  <html>
-                    <h1>Server A</h1>
-                  </html>
-                mode: '000644'
-                owner: "root"
-                group: "root"
-              "/etc/cfn/hooks.d/cfn-auto-reloader.conf":
-                content: !Sub |
-                  [cfn-auto-reloader-hook]
-                  triggers=post.update
-                  path=Resources.EC2Instance1.Metadata.AWS::CloudFormation::Init
-                  action=/opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource EC2Instance1 --region ${AWS::Region}
-                mode: "000400"
-                owner: "root"
-                group: "root"
-              "/etc/cfn/cfn-hup.conf":
-                content: !Sub |
-                  [main]
-                  stack=${AWS::StackId}
-                  region=${AWS::Region}
-                mode: "000400"
-                owner: "root"
-                group: "root"
-            services:
-              sysvinit:
-                httpd:
-                  enabled: true
-                  ensureRunning: true
+    WebServerGroup:
+      Type: AWS::AutoScaling::AutoScalingGroup
+      Properties:
+        # AvailabilityZones: !GetAZs ''
+        LaunchConfigurationName: !Ref LaunchConfig
+        MinSize: 2
+        MaxSize: 3
+        LoadBalancerNames:
+          - !Ref ElasticLoadBalancer
+        VPCZoneIdentifier:
+          - !Ref PublicSubnet1
+          - !Ref PublicSubnet2
       CreationPolicy:
         ResourceSignal:
-          Timeout: PT3M
-      Properties:
-        InstanceType: !FindInMap [ EC2Config, Nexus, InstanceType ]
-        IamInstanceProfile: !FindInMap [ IAMConfig, S3Policy, Name ]
-        SecurityGroupIds:
-          - !Ref NexusSecurityGroup
-        KeyName: !Ref InstanceKeyPair
-        ImageId: !FindInMap [ EC2Config, Nexus, ImageId ]
-        SubnetId: !Ref PublicSubnet1
-        UserData:
-          Fn::Base64:
-            !Sub |
-              #!/bin/bash
-              yum install -y aws-cfn-bootstrap
-              /opt/aws/bin/cfn-init -v -s ${AWS::StackId} -r EC2Instance1 --region ${AWS::Region} || error_exit 'Failed to run cfn-init'
-              /opt/aws/bin/cfn-hup || error_exit 'Failed to run cfn-hup'
-              /opt/aws/bin/cfn-signal -e $? --stack ${AWS::StackId} --resource EC2Instance1 --region ${AWS::Region}
+          Timeout: PT5M
+          # Count: 1
+      UpdatePolicy:
+        AutoScalingRollingUpdate:
+          MinInstancesInService: 1
+          MaxBatchSize: 1
+          PauseTime: PT5M
+          WaitOnResourceSignals: true
 
-    EC2Instance2:
-      Type: AWS::EC2::Instance
+    LaunchConfig:
+      Type: AWS::AutoScaling::LaunchConfiguration
       Metadata:
         AWS::CloudFormation::Init:
           config:
@@ -198,7 +162,7 @@
               "/var/www/html/index.html":
                 content: |
                   <html>
-                    <h1>Server B</h1>
+                    <h1>Server Start Page</h1>
                   </html>
                 mode: '000644'
                 owner: "root"
@@ -207,8 +171,9 @@
                 content: !Sub |
                   [cfn-auto-reloader-hook]
                   triggers=post.update
-                  path=Resources.EC2Instance2.Metadata.AWS::CloudFormation::Init
-                  action=/opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource EC2Instance2 --region ${AWS::Region}
+                  path=Resources.LaunchConfig.Metadata.AWS::CloudFormation::Init
+                  action=/opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource LaunchConfig --region ${AWS::Region}
+                  runas=root
                 mode: "000400"
                 owner: "root"
                 group: "root"
@@ -225,31 +190,77 @@
                 httpd:
                   enabled: true
                   ensureRunning: true
-      CreationPolicy:
-        ResourceSignal:
-          Timeout: PT3M
+              cfn-hup:
+                enabled: true
+                ensureRunning: true
+                files: [/etc/cfn/cfn-hup.conf, /etc/cfn/hooks.d/cfn-auto-reloader.conf]
       Properties:
         InstanceType: !FindInMap [ EC2Config, Nexus, InstanceType ]
         IamInstanceProfile: !FindInMap [ IAMConfig, S3Policy, Name ]
-        SecurityGroupIds:
+        SecurityGroups:
           - !Ref NexusSecurityGroup
         KeyName: !Ref InstanceKeyPair
         ImageId: !FindInMap [ EC2Config, Nexus, ImageId ]
-        SubnetId: !Ref PublicSubnet2
         UserData:
           Fn::Base64:
             !Sub |
               #!/bin/bash
               yum install -y aws-cfn-bootstrap
-              /opt/aws/bin/cfn-init -v -s ${AWS::StackId} -r EC2Instance2 --region ${AWS::Region} || error_exit 'Failed to run cfn-init'
+              /opt/aws/bin/cfn-init -v -s ${AWS::StackId} -r LaunchConfig --region ${AWS::Region} || error_exit 'Failed to run cfn-init'
               /opt/aws/bin/cfn-hup || error_exit 'Failed to run cfn-hup'
-              /opt/aws/bin/cfn-signal -e $? --stack ${AWS::StackId} --resource EC2Instance2 --region ${AWS::Region}
+              /opt/aws/bin/cfn-signal -e $? --stack ${AWS::StackId} --resource WebServerGroup --region ${AWS::Region}
+
+    WebServerScaleUpPolicy:
+      Type: AWS::AutoScaling::ScalingPolicy
+      Properties:
+        AdjustmentType: ChangeInCapacity
+        AutoScalingGroupName: !Ref WebServerGroup
+        Cooldown: '60'
+        ScalingAdjustment: 1
+    WebServerScaleDownPolicy:
+      Type: AWS::AutoScaling::ScalingPolicy
+      Properties:
+        AdjustmentType: ChangeInCapacity
+        AutoScalingGroupName: !Ref WebServerGroup
+        Cooldown: '60'
+        ScalingAdjustment: -1
+    CPUAlarmHigh:
+      Type: AWS::CloudWatch::Alarm
+      Properties:
+        AlarmDescription: Scale-up if CPU > 90% for 1 minute
+        MetricName: CPUUtilization
+        Namespace: AWS/EC2
+        Statistic: Average
+        Period: 60
+        EvaluationPeriods: 1
+        Threshold: 90
+        AlarmActions:
+          - !Ref WebServerScaleUpPolicy
+        Dimensions:
+          - Name: AutoScalingGroupName
+            Value: !Ref WebServerGroup
+        ComparisonOperator: GreaterThanThreshold
+    CPUAlarmLow:
+      Type: AWS::CloudWatch::Alarm
+      Properties:
+        AlarmDescription: Scale-down if CPU < 90% for 1 minute
+        MetricName: CPUUtilization
+        Namespace: AWS/EC2
+        Statistic: Average
+        Period: 60
+        EvaluationPeriods: 1
+        Threshold: 90
+        AlarmActions:
+          - !Ref WebServerScaleDownPolicy
+        Dimensions:
+          - Name: AutoScalingGroupName
+            Value: !Ref WebServerGroup
+        ComparisonOperator: LessThanThreshold
 
     ElasticLoadBalancer:
       Type: AWS::ElasticLoadBalancing::LoadBalancer
       Properties:
         CrossZone: true
-        Instances: [!Ref EC2Instance1, !Ref EC2Instance2]
         SecurityGroups:
           - !Ref ELBSecurityGroup
         Listeners:
