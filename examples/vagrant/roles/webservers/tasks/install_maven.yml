@@ -1,0 +1,35 @@
+---
+- name: Check Maven Dir Exists
+  stat:
+    path: "{{ maven_home }}"
+  register: maven_link
+
+- name: Unpack Maven
+  unarchive:
+    src: http://apache.volia.net/maven/maven-3/{{ maven_version }}/binaries/apache-maven-{{ maven_version }}-bin.tar.gz
+    dest: "{{ maven_src }}"
+    remote_src: yes
+  when: maven_link.stat.exists == false
+
+- name: Create Symlink For Maven
+  file:
+    path: "{{ maven_src }}/apache-maven-{{ maven_version }}"
+    src: "{{ maven_src }}/apache-maven-{{ maven_version }}"
+    dest: "{{ maven_home }}"
+    state: link
+    force: yes
+  when: maven_link.stat.exists == false
+
+- name: Configure Maven
+  block:
+    - file:
+        path: "{{ maven_sh_path }}"
+        state: touch
+    - blockinfile:
+        path:  "{{ maven_sh_path }}"
+        state: present
+        block: |
+          export M2_HOME={{ maven_home }}
+          export PATH=${M2_HOME}/bin:${PATH}
+    - shell: source {{ maven_sh_path }}
+  when: maven_link.stat.exists == false

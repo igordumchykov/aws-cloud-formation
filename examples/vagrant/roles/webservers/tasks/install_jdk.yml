@@ -1,0 +1,25 @@
+---
+- name: Check is java installed
+  shell: java -version
+  ignore_errors: True
+  register: java_version
+
+- name: Install JDK
+  yum: state=present name={{ package_name_jdk }}
+  when: java_version is failed
+  register: jdk_installed
+  no_log: True
+
+- name: Define JAVA_HOME directory
+  shell: "{{ java_home_cmd }}"
+  register: java_home_dir
+  when: jdk_installed.changed == true
+
+- name: Configure JDK
+  block:
+    - shell: export JAVA_HOME={{ java_home_dir.stdout }}
+    - lineinfile:
+        path: /etc/profile
+        state: present
+        line: "export JAVA_HOME={{ java_home_dir.stdout }}"
+  when: jdk_installed.changed == true

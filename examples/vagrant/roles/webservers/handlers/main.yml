@@ -1,0 +1,7 @@
+---
+- name: Start Nexus
+  service:
+    enabled: yes
+    name: nexus.service
+    state: started
+  no_log: True

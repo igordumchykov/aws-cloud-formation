@@ -1,0 +1,84 @@
+---
+#main script for deploying and provisioning AWS infrastructure
+
+- hosts: localhost
+  connection: local
+  gather_facts: False
+  vars:
+    stack_name: ansible-cloudformation
+    region: eu-central-1
+    cf_template: ansible-cf-test.yml
+    instance_key_pair_name: nexus-key-pair
+    provision_script_bucket_name: jdum-provision-scripts
+    provision_script_file_name: ansible-run-on-ec2-script.yml
+  vars_files:
+    - ../../external_vars.yaml
+  tasks:
+    - name: Get IP address
+      ipify_facts:
+      register: ip_facts
+
+    - set_fact:
+        client_ip_cidr: "{{ ip_facts.ansible_facts.ipify_public_ip }}/32"
+
+    - name: check for script repo existance
+      ignore_errors: True
+      # no_log: True
+      aws_s3_bucket_facts:
+        aws_access_key: "{{ ec2_access_key }}"
+        aws_secret_key: "{{ ec2_secret_key }}"
+        region: "{{ region }}"
+      register: s3_bucket_list
+
+    - set_fact:
+        script_repo_exists: "{{ provision_script_bucket_name in (s3_bucket_list.ansible_facts.buckets | map(attribute='name') )}}"
+
+    - debug:
+        msg: "Bucket '{{ provision_script_bucket_name }}' exists: {{ script_repo_exists }}"
+
+    - name: create script repo if not existing
+      aws_s3:
+        aws_access_key: "{{ ec2_access_key }}"
+        aws_secret_key: "{{ ec2_secret_key }}"
+        region: "{{ region }}"
+        bucket: "{{ provision_script_bucket_name }}"
+        mode: create
+      when: "{{ script_repo_exists }} == false"
+
+    - name: put scripts repo if not existing
+      aws_s3:
+        aws_access_key: "{{ ec2_access_key }}"
+        aws_secret_key: "{{ ec2_secret_key }}"
+        region: "{{ region }}"
+        bucket: "{{ provision_script_bucket_name }}"
+        object: "{{ provision_script_file_name }}"
+        src: "{{ provision_script_file_name }}"
+        mode: put
+
+    - name: create/update/delete cloudformation stack
+      cloudformation:
+        aws_access_key: "{{ ec2_access_key }}"
+        aws_secret_key: "{{ ec2_secret_key }}"
+        stack_name: "{{ stack_name }}"
+        state: "present"
+        region: "{{ region }}"
+        disable_rollback: no
+        template: "{{ cf_template }}"
+        template_parameters:
+          InstanceKeyPair: "{{ instance_key_pair_name }}"
+          ProvisionScriptBucketName: "{{ provision_script_bucket_name }}"
+          ProvisionScriptFileName: "{{ provision_script_file_name }}"
+          ClientIPCIDR: "{{ client_ip_cidr }}"
+        tags:
+          Stack: "{{ stack_name }}"
+
+    - name: get facts about stack
+      cloudformation_facts:
+        aws_access_key: "{{ ec2_access_key }}"
+        aws_secret_key: "{{ ec2_secret_key }}"
+        stack_name: "{{ stack_name }}"
+        region: "{{ region }}"
+      register: aws_facts
+
+    - debug:
+        msg: "{{ aws_facts }}"

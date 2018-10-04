@@ -1,0 +1,26 @@
+---
+
+- name: Make sure all OS patches are applied
+  shell: yum update -y
+  no_log: True
+
+- name: Install JDK
+  import_tasks: install_jdk.yml
+
+- name: Install Maven
+  import_tasks: install_maven.yml
+
+- name: Create group
+  group:
+    name: "{{ nexus_group }}"
+    state: present
+
+- name: Add User
+  user:
+    name: "{{ nexus_user }}" #sudo useradd nexus
+    group: "{{ nexus_group }}" #sudo chown nexus:nexus /opt/nexus -R
+    state: present
+    # home: /usr/local/nexus #sudo usermod -d /opt/nexus nexus
+
+- name: Install Nexus
+  import_tasks: install_nexus.yml

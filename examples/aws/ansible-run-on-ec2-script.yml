@@ -1,0 +1,23 @@
+---
+#script for post initialization EC2 instance, running on EC2 instance
+
+- hosts: localhost
+  connection: local
+  tasks:
+    - name: Install httpd
+      yum: name=httpd
+      become: True
+
+    - name: Create index page
+      blockinfile:
+        create: yes
+        path: /var/www/html/index.html
+        block: |
+          <html>
+            <h1>Web server</h1>
+          </html>
+      become: True
+
+    - name: start the httpd service
+      service: name=httpd state=started
+      become: True

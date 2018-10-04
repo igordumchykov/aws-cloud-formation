@@ -1,0 +1,39 @@
+---
+- name: Check Nexus Exists and Non-empty
+  shell: if [ -d {{ nexus_home }} ]; then ls {{ nexus_home }}; fi;
+  register: nexus_home_dir
+
+- name: Create Nexus home
+  file:
+    path: "{{ nexus_home }}"
+    state: directory
+    owner: "{{ nexus_user }}"
+    group: "{{ nexus_group }}"
+  when: nexus_home_dir.stdout == ""
+
+- name: Install Nexus
+  unarchive:
+    src: https://sonatype-download.global.ssl.fastly.net/nexus/{{ nexus_version }}/nexus-{{ nexus_full_version }}-unix.tar.gz
+    dest: "{{ nexus_home }}"
+    remote_src: yes
+  when: nexus_home_dir.stdout == ""
+  register: nexus_installed
+
+- name: Set Nexus Folder Ownership
+  shell: chown -R {{ nexus_user }}:{{ nexus_group }} {{ nexus_home }}
+  when: nexus_installed.changed == true
+
+- name: Create Nexus Script
+  template:
+    src: "{{ nexus_template }}"
+    dest: "{{ nexus_script }}"
+  when: nexus_installed.changed == true
+
+- name: Edit Nexusrc Configuration
+  lineinfile:
+    path: "{{ nexus_home }}/nexus-{{ nexus_full_version }}/bin/nexus.rc"
+    state: present
+    line: 'run_as_user="{{ nexus_user }}"'
+  when: nexus_installed.changed == true
+  notify:
+    - Start Nexus

@@ -1,0 +1,35 @@
+---
+
+- name: Make sure all OS patches are applied
+  shell: yum update -y
+#  no_log: True
+
+- name: Install JDK
+  import_tasks: install_jdk.yml
+
+- name: Install Maven
+  import_tasks: install_maven.yml
+
+- name: Create group
+  group:
+    name: "{{ nexus_group }}"
+    state: present
+
+- name: Add User
+  user:
+    name: "{{ nexus_user }}" #sudo useradd nexus
+    group: "{{ nexus_group }}" #sudo chown nexus:nexus /opt/nexus -R
+    state: present
+    # home: /usr/local/nexus #sudo usermod -d /opt/nexus nexus
+
+# For RAM 1024 running Nexus service will generate OutOfMemory Error.
+# To avoid such an error we can use create swap file
+- name: Create swap file
+  block:
+    - shell: dd if=/dev/zero of=/swapfile count=4096 bs=1MiB
+    - shell: chmod 600 /swapfile
+    - shell: mkswap /swapfile
+    - shell: swapon /swapfile
+
+- name: Install Nexus
+  import_tasks: install_nexus.yml

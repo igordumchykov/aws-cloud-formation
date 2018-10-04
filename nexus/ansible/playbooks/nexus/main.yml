@@ -1,0 +1,5 @@
+---
+- hosts: localhost
+  roles:
+    - webservers
+  become: True
