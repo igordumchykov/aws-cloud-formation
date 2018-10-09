@@ -1,16 +1,16 @@
 ---
 #script for deploying AWS infrastructure running on client machine
 
-  Description: 'Creates Amazon Autoscaling Group with initial 2 EC2 instances and Scaling up and down policies using
-  CPU Alarms. In each EC2 instance Nexus OSS is provisioned using ansible script that is uploaded to S3 bucket before
-  cloud formation script runs. Autoscaling Group is created inside Multi zone VPC (with 2 subnets). There is Elastic
-  Load Balancer in from of Autoscaling Group. ELB listens to EC2 instances on port 8081 (Nexus port) and port 80
-  outside the world. EC2 instances are isolated, there fore are not accessible from outside (only opened for ELB that
-  has both VPC subnet attachments), but have access to the internet. All this security settings are utilized using
-  Security Groups - one for EC2 instances and another one - for ELB. Launch Configuration that is used by Autoscaling
-  Group, includes cfn-init script for reading metadata, cfn-hup script that detects changes in resource metadata and
-  runs user-specified actions when change is detected and cfn-signal, that indicates whether instances have been
-  successfully created or updated'
+#  Description: 'Creates Amazon Autoscaling Group with initial 2 EC2 instances and Scaling up and down policies using
+#  CPU Alarms. In each EC2 instance Nexus OSS is provisioned using ansible script that is uploaded to S3 bucket before
+#  cloud formation script runs. Autoscaling Group is created inside Multi zone VPC (with 2 subnets). There is Elastic
+#  Load Balancer in from of Autoscaling Group. ELB listens to EC2 instances on port 8081 (Nexus port) and port 80
+#  outside the world. EC2 instances are isolated, there fore are not accessible from outside (only opened for ELB that
+#  has both VPC subnet attachments), but have access to the internet. All this security settings are utilized using
+#  Security Groups - one for EC2 instances and another one - for ELB. Launch Configuration that is used by Autoscaling
+#  Group, includes cfn-init script for reading metadata, cfn-hup script that detects changes in resource metadata and
+#  runs user-specified actions when change is detected and cfn-signal, that indicates whether instances have been
+#  successfully created or updated'
 
   Parameters:
     InstanceKeyPair:

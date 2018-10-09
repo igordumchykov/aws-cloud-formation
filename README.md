@@ -112,4 +112,75 @@ https://www.digitalocean.com/community/tutorials/how-to-add-swap-on-centos-7
 Nexus Logs:
 Nexus log you can find under NEXUS_HOME/data/log/nexus.log
 
+New changes in Nexus 3.12:
+Added support for S3 block storage.
+To configure using S3 repository do next:
+1. Add S3 bucket.
+2. NexusUrl - Configuration - Blob Stores - Create blob store - Add all information
+3. Proxy maven central:
+    3.1 Configuration
+    3.2 Repositories
+    3.3 Create repository
+    3.4 Name: maven-proxy, Remote storage URL:  https://repo1.maven.org/maven2, blob storage - S3 bucket
+    3.5 Go to ~/.m2/settings.xml:
+        3.5.1 Add next:
+        
+        <settings>
+          <mirrors>
+        	<mirror>
+          	<!--This sends everything else to /public -->
+          	<id>nexus</id>
+          	<mirrorOf>*</mirrorOf>
+          	<url>http://localhost:8081/repository/maven-proxy/</url>
+        	</mirror>
+          </mirrors>
+          <profiles>
+        	<profile>
+          	<id>nexus</id>
+          	<!--Enable snapshots for the built in central repo to direct -->
+          	<!--all requests to nexus via the mirror -->
+          	<repositories>
+            	<repository>
+              	<id>central</id>
+              	<url>http://central</url>
+              	<releases><enabled>true</enabled></releases>
+              	<snapshots><enabled>true</enabled></snapshots>
+            	</repository>
+          	</repositories>
+         	<pluginRepositories>
+            	<pluginRepository>
+              	<id>central</id>
+              	<url>http://central</url>
+              	<releases><enabled>true</enabled></releases>
+              	<snapshots><enabled>true</enabled></snapshots>
+            	</pluginRepository>
+          	</pluginRepositories>
+        	</profile>
+          </profiles>
+          <activeProfiles>
+        	<!--make the profile active all the time -->
+        	<activeProfile>nexus</activeProfile>
+          </activeProfiles>
+        </settings>
+        
+     3.6 Test connection:
+        3.6.1 Create pom.xml:
+            
+        <project>
+          <modelVersion>4.0.0</modelVersion>
+          <groupId>com.example</groupId>
+          <artifactId>nexus-proxy</artifactId>
+          <version>1.0-SNAPSHOT</version>
+          <dependencies>
+            <dependency>
+              <groupId>junit</groupId>
+              <artifactId>junit</artifactId>
+              <version>4.10</version>
+            </dependency>
+          </dependencies>
+        </project>
+        
+        3.6.2 mvn package
+        3.6.3 Go to Search - Maven - type proxied artifactId
+        
 

@@ -5,9 +5,11 @@ maven_src: /usr/local/src
 maven_home: /usr/local/maven
 maven_sh_path: /etc/profile.d/maven.sh
 nexus_version: 3
-nexus_full_version: 3.0.2-02
+nexus_full_version: 3.13.0-01
 nexus_home: /usr/local/nexus
 nexus_user: nexus
 nexus_group: nexus
 nexus_script: /etc/systemd/system/nexus.service
 nexus_template: nexus.service.template
+
+
