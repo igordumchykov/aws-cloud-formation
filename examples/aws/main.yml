@@ -12,7 +12,7 @@
     provision_script_bucket_name: jdum-provision-scripts
     provision_script_file_name: ansible-run-on-ec2-script.yml
   vars_files:
-    - ../../external_vars.yaml
+    - ../../main.yml
   tasks:
     - name: Get IP address
       ipify_facts:

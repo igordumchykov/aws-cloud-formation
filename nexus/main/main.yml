@@ -1,0 +1,10 @@
+---
+- hosts: localhost
+  roles:
+    - nexus_deploy_all
+
+
+
+
+
+

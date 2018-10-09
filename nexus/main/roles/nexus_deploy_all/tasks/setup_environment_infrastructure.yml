@@ -1,0 +1,17 @@
+---
+- name: create/update/delete cloudformation stack
+  cloudformation:
+    aws_access_key: "{{ ec2_access_key }}"
+    aws_secret_key: "{{ ec2_secret_key }}"
+    stack_name: "{{ stack_name }}"
+    state: "present"
+    region: "{{ region }}"
+    disable_rollback: no
+    template: "{{ cf_template }}"
+    template_parameters:
+      InstanceKeyPair: "{{ instance_key_pair_name }}"
+      ProvisionScriptBucketName: "{{ provision_script_bucket_name }}"
+      ProvisionScriptFileName: "{{ provision_script_s3_main_file }}"
+      ClientIPCIDR: "{{ client_ip_cidr }}"
+    tags:
+      Stack: "{{ stack_name }}"

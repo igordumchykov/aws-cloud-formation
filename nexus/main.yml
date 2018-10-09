@@ -15,7 +15,7 @@
     provision_script_src_path: ./ansible/playbooks/
     provision_script_s3_main_file: nexus/main.yml
   vars_files:
-    - ../external_vars.yaml
+    - ../main.yml
   tasks:
     - name: Get IP address
       ipify_facts:

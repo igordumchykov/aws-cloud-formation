@@ -1,10 +1,20 @@
 # aws-cloud-formation
 Ansible playbook with AWS cloudformation integration for developing infrastructure and provisioning Nexus repository on EC2 instances.
 
+Project structure:
+- examples
+    - aws - samples for creation aws stack using cloudformation
+    - vagrant - provision Nexus  locally on VM
+  
+- nexus
+    - ansible - provision scripts run on EC2 instance while AWS infrastructure creation
+    - aws - setup AWS infrastructure templates
+    - main - entry point folder for running ansible playbook: setup AWS infrastucture, run script on EC2 instances  
+    
 Steps to run:
 1. go to ./nexus directory
 2. add aws credentials and key pair (*.csv, *.pem)
-3. run ansible-playbook main.yml
+3. run ansible-playbook main/main.yml
 
 Basic requirements:
 1. Environment deployment should be automated

@@ -1,0 +1,11 @@
+---
+stack_name: ansible-cloudformation
+region: eu-central-1
+cf_template: ../aws/cloudformation/cf-template.yml
+instance_key_pair_name: nexus-key-pair
+provision_script_bucket_name: jdum-provision-scripts
+blob_repository_bucket_name: nexus-repository-s3
+provision_script_src_path: ../ansible/playbooks/
+provision_script_s3_main_file: nexus/main.yml
+
+

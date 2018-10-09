@@ -1,0 +1,32 @@
+---
+- name: check for script repo existance
+  ignore_errors: True
+  # no_log: True
+  aws_s3_bucket_facts:
+    aws_access_key: "{{ ec2_access_key }}"
+    aws_secret_key: "{{ ec2_secret_key }}"
+    region: "{{ region }}"
+  register: s3_bucket_list
+
+- set_fact:
+    script_repo_exists: "{{ provision_script_bucket_name in (s3_bucket_list.ansible_facts.buckets | map(attribute='name') )}}"
+
+- debug:
+    msg: "Bucket '{{ provision_script_bucket_name }}' exists: {{ script_repo_exists }}"
+
+- name: create script repo if not existing
+  aws_s3:
+    aws_access_key: "{{ ec2_access_key }}"
+    aws_secret_key: "{{ ec2_secret_key }}"
+    region: "{{ region }}"
+    bucket: "{{ provision_script_bucket_name }}"
+    mode: create
+  when: "{{ script_repo_exists }} == false"
+
+- name: put scripts repo if not existing
+  s3_sync:
+    aws_access_key: "{{ ec2_access_key }}"
+    aws_secret_key: "{{ ec2_secret_key }}"
+    region: "{{ region }}"
+    bucket: "{{ provision_script_bucket_name }}"
+    file_root: "{{ provision_script_src_path }}"

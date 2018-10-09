@@ -1,0 +1,7 @@
+---
+- name: Get IP address
+  ipify_facts:
+  register: ip_facts
+
+- set_fact:
+    client_ip_cidr: "{{ ip_facts.ansible_facts.ipify_public_ip }}/32"

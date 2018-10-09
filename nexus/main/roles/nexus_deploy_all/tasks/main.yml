@@ -1,0 +1,13 @@
+---
+- name: extract client ip
+  import_tasks: extract_client_ip.yml
+
+- name: setup script repo
+  import_tasks: setup_script_repo.yml
+
+- name: setup artifact repo
+  import_tasks: setup_artifact_repo.yml
+
+- name: setup environment infrastructure
+  import_tasks: setup_environment_infrastructure.yml
+  notify: Print facts

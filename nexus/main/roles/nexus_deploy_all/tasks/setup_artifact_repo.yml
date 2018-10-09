@@ -1,0 +1,16 @@
+---
+- set_fact:
+    blob_repository_exists: "{{ blob_repository_bucket_name in (s3_bucket_list.ansible_facts.buckets | map(attribute='name') )}}"
+
+- debug:
+    msg: "Bucket '{{ blob_repository_bucket_name }}' exists: {{ blob_repository_exists }}"
+
+- name: create repository blob storage if not existing
+  aws_s3:
+    aws_access_key: "{{ ec2_access_key }}"
+    aws_secret_key: "{{ ec2_secret_key }}"
+    region: "{{ region }}"
+    bucket: "{{ blob_repository_bucket_name }}"
+    mode: create
+  when: "{{ blob_repository_exists }} == false"
+
